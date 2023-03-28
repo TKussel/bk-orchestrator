@@ -52,33 +52,32 @@ impl TryFrom<BeamTask> for ExecutionTask {
 }
 
 #[derive(Debug, Clone)]
-struct Config {
+pub struct BeamConfig {
     app_id: String,
     app_key: String,
     beam_proxy_url: String,
     client: reqwest::Client,
-    docker: Docker,
 }
 
 #[tokio::main]
 async fn main() {
     println!("Starting Executor...");
-    let config = Config {app_id: "executor.tobias-dev.broker".into(), app_key: "Secret".into(), beam_proxy_url: "http://127.0.0.1:8081".into(), client: reqwest::Client::new(), docker: Docker::connect_with_local_defaults().expect("Cannot initialize docker")};
-    config.docker.version().await.expect("Cannot connect to docker");
+    let config = BeamConfig {app_id: "executor.tobias-dev.broker".into(), app_key: "Secret".into(), beam_proxy_url: "http://127.0.0.1:8081".into(), client: reqwest::Client::new()};
+    let docker =  Docker::connect_with_local_defaults().expect("Cannot initialize docker");
+    docker.version().await.expect("Cannot connect to docker");
 
     let (tx, rx): (Sender<ExecutionTask>, Receiver<ExecutionTask>) = mpsc::channel(1024); 
     let beam_tx = tx.clone();
-    let beam_fetcher = tokio::spawn( move || fetch_beam_tasks(beam_tx, &config)());
-    // Execute Task
-    // Do something with results
+    let _beam_fetcher = tokio::spawn( async move { fetch_beam_tasks(beam_tx, config)});
+    let _executor = tokio::spawn(async move { handle_tasks(rx, docker)});
 }
 
-async fn fetch_beam_tasks(tx: Sender<ExecutionTask>, config: &Config) {
+async fn fetch_beam_tasks(tx: Sender<ExecutionTask>, config: BeamConfig) {
     loop {
-        beam::check_availability(config).await;
-        let Ok(tasks) = beam::retrieve_tasks(config).await else {
+        beam::check_availability(&config).await;
+        let Ok(tasks) = beam::retrieve_tasks(&config).await else {
             println!("Cannot retreive Tasks");
-            sleep(Duration::from_secs(10));
+            sleep(Duration::from_secs(10)).await;
             continue;
         };
         for task in tasks {
@@ -86,30 +85,27 @@ async fn fetch_beam_tasks(tx: Sender<ExecutionTask>, config: &Config) {
                 println!("Error with task {:?}", task);
                 continue;
             };
-            tx.send(task);
+            _ = tx.send(task).await.or_else(|e|{println!("Error: Could not send task to execution handler: {e}");Err(ExecutorError::ParsingError("()".into()))});
         }
     }
 }
 
-async fn handle_tasks(rx: Receiver<ExecutionTask>, config: &Config) {
+async fn handle_tasks(mut rx: Receiver<ExecutionTask>, docker: Docker) {
     loop {
     let task = rx.recv().await;
     if let Some(task) = task {
-        match task.orchestrator {
-            Orchestrator::BKOrchestrator => tokio::spawn(async move {execute_bk_orchestrator(config, task.workload, uuid::Uuid::new_v4())}),
-            _ => Err(ExecutorError::ConfigurationError("Invalid Orchestrator".into()))
-        };
+        let local_docker_handler = docker.clone();
+        // Todo: Match on Orchestrator
+        tokio::spawn(async move {execute_bk_orchestrator(local_docker_handler, task.workload, uuid::Uuid::new_v4())});
     } else {
-        sleep(Duration::from_millis(50));
+        sleep(Duration::from_millis(50)).await;
     };
-    
-    // Wait on rx
-    // switch, based on orchestrator
-    // spawn orchestrator_wrapper
+
     }
 }
 
-async fn execute_bk_orchestrator(config: &Config, workload: Workload, id: Uuid) -> Result<(), ExecutorError> {
+
+async fn execute_bk_orchestrator(docker: Docker, workload: Workload, id: Uuid) -> Result<(), ExecutorError> {
     let container_name = format!("BKOrchestrator-{id}");
     let container_options = CreateContainerOptions {name: &container_name, platform: None};
     let start_options = bollard::container::Config {
@@ -122,8 +118,8 @@ async fn execute_bk_orchestrator(config: &Config, workload: Workload, id: Uuid) 
         ..Default::default()
     };
 
-    let id = config.docker.create_container(Some(container_options), start_options).await.map_err(|e|ExecutorError::DockerError(format!("Cannot create container {container_name}: {e}")))?.id;
-    config.docker.start_container::<String>(&id, None).await.map_err(|e| ExecutorError::DockerError(format!("Cannot start container: {e}")))?;
+    let id = docker.create_container(Some(container_options), start_options).await.map_err(|e|ExecutorError::DockerError(format!("Cannot create container {container_name}: {e}")))?.id;
+    docker.start_container::<String>(&id, None).await.map_err(|e| ExecutorError::DockerError(format!("Cannot start container: {e}")))?;
 
     let attach_options = AttachContainerOptions::<String> {
         stdout: Some(true),
@@ -133,19 +129,19 @@ async fn execute_bk_orchestrator(config: &Config, workload: Workload, id: Uuid) 
         ..Default::default()
     };
     let AttachContainerResults { mut output, mut input} =
-        config.docker.attach_container(&id, Some(attach_options)).await.map_err(|e|ExecutorError::DockerError(format!("Cannot attach to container {id}: {e}")))?;
+        docker.attach_container(&id, Some(attach_options)).await.map_err(|e|ExecutorError::DockerError(format!("Cannot attach to container {id}: {e}")))?;
 
     let input_instruction = serde_json::to_string(&workload).map_err(|e|ExecutorError::UnableToParseWorkload(e))?;
 
     input.write_all(input_instruction.as_bytes()).await.map_err(|e|ExecutorError::DockerError(format!("Cannot write to stdin of container {id}: {e}")))?;
-    input.flush();
+    input.flush().await;
 
 
     while let Some(Ok(msg)) = output.next().await {
         print!("{msg}");
     }
 
-    config.docker.remove_container(&id, Some(RemoveContainerOptions {force: true, ..Default::default()})).await.map_err(|e|ExecutorError::DockerError(format!("Cannot remove container {id}: {e}")));
+    docker.remove_container(&id, Some(RemoveContainerOptions {force: true, ..Default::default()})).await.map_err(|e|ExecutorError::DockerError(format!("Cannot remove container {id}: {e}")))?;
 
     Ok(())
 }

@@ -164,7 +164,7 @@ impl BeamResult {
     }
 }
 
-pub async fn check_availability(config: &Config) {
+pub async fn check_availability(config: &BeamConfig) {
     let mut attempt: usize = 0;
 
     println!("Check Beam availability...");
@@ -202,7 +202,7 @@ pub async fn check_availability(config: &Config) {
     }
 }
 
-pub async fn retrieve_tasks(config: &Config) -> Result<Vec<BeamTask>, ExecutorError> {
+pub async fn retrieve_tasks(config: &BeamConfig) -> Result<Vec<BeamTask>, ExecutorError> {
     println!("Retrieve tasks...");
 
     let mut tasks: Vec<BeamTask> = Vec::new();
