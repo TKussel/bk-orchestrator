@@ -4,3 +4,8 @@ artifacts/
 dev/pki/*
 !dev/pki/pki
 **/mitmproxy/
+
+pki/*.pem
+pki/*.json
+pki/*.secret
+.env

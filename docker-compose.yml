@@ -1,0 +1,34 @@
+version: "3.7"
+services:
+  proxy:
+    image: samply/beam-proxy:develop
+    ports:
+      - 8081:8081
+    environment:
+      BROKER_URL: ${BROKER_URL}
+      PROXY_ID: ${PROXY_ID}
+      APP_0_ID: ${APP_ID_SHORT}
+      APP_0_KEY: ${APP_KEY}
+      PRIVKEY_FILE: /run/secrets/proxy.pem
+      TLS_CA_CERTIFICATE_DIR: ${TLS_CA_CERTIFICATE_DIR}
+      NO_PROXY: ${NO_PROXY}
+      HTTP_PROXY: ${HTTP_PROXY}
+      HTTPS_PROXY: ${HTTPS_PROXY}
+      ROOTCERT_FILE: /run/secrets/root.crt.pem
+    secrets:
+      - proxy.pem
+      - root.crt.pem
+  orchestrator:
+    depends_on: [ proxy ]
+    build: .
+    image: bk-orchestrator:local
+    environment:
+      NO_PROXY: proxy
+      no_proxy: proxy
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock"
+secrets:
+  proxy.pem:
+    file: ./pki/${PROXY_ID_SHORT}.priv.pem
+  root.crt.pem:
+    file: ./pki/root.crt.pem
