@@ -69,7 +69,8 @@ async fn main() {
     let (tx, rx): (Sender<ExecutionTask>, Receiver<ExecutionTask>) = mpsc::channel(1024); 
     let beam_tx = tx.clone();
     let _beam_fetcher = tokio::spawn( async move { fetch_beam_tasks(beam_tx, config)});
-    let _executor = tokio::spawn(async move { handle_tasks(rx, docker)});
+    let executor = tokio::spawn(async move { handle_tasks(rx, docker)});
+    executor.await;
 }
 
 async fn fetch_beam_tasks(tx: Sender<ExecutionTask>, config: BeamConfig) {
