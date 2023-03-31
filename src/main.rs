@@ -1,5 +1,6 @@
 mod beam;
 mod error;
+mod executor;
 
 use std::time::Duration;
 
@@ -16,7 +17,7 @@ use uuid::Uuid;
 
 
 #[derive(Debug, Copy, Clone, Hash, Deserialize)]
-enum Orchestrator {
+enum Executor {
     BKOrchestrator
 }
 
@@ -37,7 +38,7 @@ struct Workload {
 
 #[derive(Debug, Clone, Deserialize)]
 struct ExecutionTask {
-    orchestrator: Orchestrator,
+    executor: Executor,
     workload: Workload
 }
 
@@ -70,10 +71,13 @@ async fn main() {
     let beam_tx = tx.clone();
     let _beam_fetcher = tokio::spawn( async move { fetch_beam_tasks(beam_tx, config)});
     let executor = tokio::spawn(async move { handle_tasks(rx, docker)});
-    executor.await;
+    println!("Started  up, waiting for tasks");
+    _ = executor.await;
+    println!("This should not be reached");
 }
 
 async fn fetch_beam_tasks(tx: Sender<ExecutionTask>, config: BeamConfig) {
+    println!("Beam-Connector started");
     loop {
         beam::check_availability(&config).await;
         let Ok(tasks) = beam::retrieve_tasks(&config).await else {
@@ -92,12 +96,13 @@ async fn fetch_beam_tasks(tx: Sender<ExecutionTask>, config: BeamConfig) {
 }
 
 async fn handle_tasks(mut rx: Receiver<ExecutionTask>, docker: Docker) {
+    println!("Executor Handler started");
     loop {
     let task = rx.recv().await;
     if let Some(task) = task {
         let local_docker_handler = docker.clone();
         // Todo: Match on Orchestrator
-        tokio::spawn(async move {execute_bk_orchestrator(local_docker_handler, task.workload, uuid::Uuid::new_v4())});
+        tokio::spawn(async move {executor::execute_bk_orchestrator(local_docker_handler, task.workload, uuid::Uuid::new_v4())});
     } else {
         sleep(Duration::from_millis(50)).await;
     };
@@ -106,43 +111,3 @@ async fn handle_tasks(mut rx: Receiver<ExecutionTask>, docker: Docker) {
 }
 
 
-async fn execute_bk_orchestrator(docker: Docker, workload: Workload, id: Uuid) -> Result<(), ExecutorError> {
-    let container_name = format!("BKOrchestrator-{id}");
-    let container_options = CreateContainerOptions {name: &container_name, platform: None};
-    let start_options = bollard::container::Config {
-        image: Some("samply/bridgehead-executor"),
-        attach_stdin: Some(true),
-        attach_stderr: Some(true),
-        attach_stdout: Some(true),
-        tty: Some(true),
-        open_stdin: Some(true),
-        ..Default::default()
-    };
-
-    let id = docker.create_container(Some(container_options), start_options).await.map_err(|e|ExecutorError::DockerError(format!("Cannot create container {container_name}: {e}")))?.id;
-    docker.start_container::<String>(&id, None).await.map_err(|e| ExecutorError::DockerError(format!("Cannot start container: {e}")))?;
-
-    let attach_options = AttachContainerOptions::<String> {
-        stdout: Some(true),
-        stderr: Some(true),
-        stdin: Some(true),
-        stream: Some(true),
-        ..Default::default()
-    };
-    let AttachContainerResults { mut output, mut input} =
-        docker.attach_container(&id, Some(attach_options)).await.map_err(|e|ExecutorError::DockerError(format!("Cannot attach to container {id}: {e}")))?;
-
-    let input_instruction = serde_json::to_string(&workload).map_err(|e|ExecutorError::UnableToParseWorkload(e))?;
-
-    input.write_all(input_instruction.as_bytes()).await.map_err(|e|ExecutorError::DockerError(format!("Cannot write to stdin of container {id}: {e}")))?;
-    input.flush().await;
-
-
-    while let Some(Ok(msg)) = output.next().await {
-        print!("{msg}");
-    }
-
-    docker.remove_container(&id, Some(RemoveContainerOptions {force: true, ..Default::default()})).await.map_err(|e|ExecutorError::DockerError(format!("Cannot remove container {id}: {e}")))?;
-
-    Ok(())
-}
