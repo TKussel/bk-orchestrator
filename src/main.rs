@@ -18,7 +18,7 @@ use uuid::Uuid;
 
 #[derive(Debug, Copy, Clone, Hash, Deserialize)]
 enum Executor {
-    BKOrchestrator
+    BKExecutor
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
