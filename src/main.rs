@@ -70,8 +70,7 @@ async fn main() {
     let (tx, rx): (Sender<ExecutionTask>, Receiver<ExecutionTask>) = mpsc::channel(1024); 
     let beam_tx = tx.clone();
     let _beam_fetcher = tokio::spawn( async move { fetch_beam_tasks(beam_tx, config)});
-    let executor = tokio::spawn(async move { handle_tasks(rx, docker)});
-    println!("Started  up, waiting for tasks");
+    let executor = tokio::spawn(async move { handle_tasks(rx, docker).await});
     _ = executor.await;
     println!("This should not be reached");
 }
