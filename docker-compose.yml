@@ -15,6 +15,7 @@ services:
       HTTP_PROXY: ${HTTP_PROXY}
       HTTPS_PROXY: ${HTTPS_PROXY}
       ROOTCERT_FILE: /run/secrets/root.crt.pem
+      RUST_LOG: ${RUST_LOG}
     secrets:
       - proxy.pem
       - root.crt.pem
@@ -23,8 +24,15 @@ services:
     build: .
     image: bk-orchestrator:local
     environment:
+      BEAM_PROXY_URL: http://proxy:8081
+      BEAM_APP_ID: ${APP_ID_SHORT}.${BROKER_ID}
+      BEAM_API_KEY: ${APP_KEY}
+      TLS_CA_CERTIFICATES_DIR: ${TLS_CA_CERTIFICATE_DIR}
+      HTTP_PROXY: ${HTTP_PROXY}
+      HTTPS_PROXY: ${HTTPS_PROXY}
       NO_PROXY: proxy
       no_proxy: proxy
+      RUST_LOG: ${RUST_LOG}
     volumes:
       - "/var/run/docker.sock:/var/run/docker.sock"
 secrets:

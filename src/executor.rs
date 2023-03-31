@@ -3,7 +3,7 @@ use futures_util::StreamExt;
 use tokio::io::AsyncWriteExt;
 use uuid::Uuid;
 
-use crate::{Workload, error::ExecutorError};
+use crate::{error::ExecutorError, workflow::Workload};
 
 pub(crate) async fn execute_bk_orchestrator(docker: Docker, workload: Workload, id: Uuid) -> Result<(), ExecutorError> {
     let container_name = format!("BKOrchestrator-{id}");

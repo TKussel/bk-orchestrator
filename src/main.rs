@@ -1,69 +1,33 @@
 mod beam;
 mod error;
 mod executor;
+mod workflow;
+mod config;
+mod banner;
+mod logger;
 
-use std::time::Duration;
+use std::{time::Duration, process::exit};
 
-use beam::BeamTask;
+use config::BeamConfig;
 use error::ExecutorError;
-use serde::{Deserialize, Serialize};
-use tokio::{sync::mpsc::{Receiver, Sender, self}, time::sleep, io::AsyncWriteExt};
-
-use futures_util::StreamExt;
+use tokio::{sync::mpsc::{Receiver, Sender, self}, time::sleep};
 
 use reqwest::header::AUTHORIZATION;
-use bollard::{Docker, container::{CreateContainerOptions, AttachContainerResults, AttachContainerOptions, RemoveContainerOptions}};
-use uuid::Uuid;
+use bollard::Docker;
 
-
-#[derive(Debug, Copy, Clone, Hash, Deserialize)]
-enum Executor {
-    BKExecutor
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-struct WorkflowSteps {
-    name: String,
-    image: String,
-    env: Option<Vec<String>>,
-    input: Option<Vec<String>>,
-    output: String
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-struct Workload {
-    output: Vec<String>,
-    steps: Vec<WorkflowSteps>
-}
-
-#[derive(Debug, Clone, Deserialize)]
-struct ExecutionTask {
-    executor: Executor,
-    workload: Workload
-}
-
-impl TryFrom<BeamTask> for ExecutionTask {
-    type Error = ExecutorError;
-
-    fn try_from(value: BeamTask) -> Result<Self, Self::Error> {
-        let result: Result<Self, Self::Error> = serde_json::from_str(&value.body).map_err(|e| ExecutorError::ParsingError(e.to_string()));
-        result
-        // Todo: Get TaskId and put it in the ExecutionTask
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct BeamConfig {
-    app_id: String,
-    app_key: String,
-    beam_proxy_url: String,
-    client: reqwest::Client,
-}
+use crate::workflow::ExecutionTask;
+use tracing::{debug, error, warn, info};
 
 #[tokio::main]
-async fn main() {
-    println!("Starting Executor...");
-    let config = BeamConfig {app_id: "executor.tobias-dev.broker".into(), app_key: "Secret".into(), beam_proxy_url: "http://127.0.0.1:8081".into(), client: reqwest::Client::new()};
+async fn main() -> Result<(), ExecutorError> {
+    color_eyre::install().map_err(|e|ExecutorError::ConfigurationError(format!("Cannot initialize error printer: {e}")))?;
+    if let Err(e) = logger::init_logger() {
+        error!("Cannot initalize logger: {}", e);
+        exit(1);
+    };
+    banner::print_banner();
+
+    let config = config::BeamConfig::load()?;
     let docker =  Docker::connect_with_local_defaults().expect("Cannot initialize docker");
     docker.version().await.expect("Cannot connect to docker");
 
@@ -72,30 +36,31 @@ async fn main() {
     let _beam_fetcher = tokio::spawn( async move { fetch_beam_tasks(beam_tx, config)});
     let executor = tokio::spawn(async move { handle_tasks(rx, docker).await});
     _ = executor.await;
-    println!("This should not be reached");
+    error!("This should not be reached");
+    Ok(())
 }
 
 async fn fetch_beam_tasks(tx: Sender<ExecutionTask>, config: BeamConfig) {
-    println!("Beam-Connector started");
+    debug!("Beam-Connector started");
     loop {
         beam::check_availability(&config).await;
         let Ok(tasks) = beam::retrieve_tasks(&config).await else {
-            println!("Cannot retreive Tasks");
+            warn!("Cannot retreive Tasks");
             sleep(Duration::from_secs(10)).await;
             continue;
         };
         for task in tasks {
             let Ok(task) = ExecutionTask::try_from(task.clone()) else {
-                println!("Error with task {:?}", task);
+                warn!("Error in task {:?}", task);
                 continue;
             };
-            _ = tx.send(task).await.or_else(|e|{println!("Error: Could not send task to execution handler: {e}");Err(ExecutorError::ParsingError("()".into()))});
+            _ = tx.send(task).await.or_else(|e|{error!("Error: Could not send task to execution handler: {e}");Err(ExecutorError::ParsingError("()".into()))});
         }
     }
 }
 
 async fn handle_tasks(mut rx: Receiver<ExecutionTask>, docker: Docker) {
-    println!("Executor Handler started");
+    debug!("Executor Handler started");
     loop {
     let task = rx.recv().await;
     if let Some(task) = task {

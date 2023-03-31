@@ -3,6 +3,7 @@ use std::{time::Duration, fmt::Display};
 use reqwest::{header::{HeaderMap, HeaderValue}, StatusCode};
 use serde::{de, Deserializer, Deserialize, Serialize, Serializer};
 use tokio::time::sleep;
+use tracing::trace;
 use uuid::Uuid;
 
 use crate::*;
@@ -167,7 +168,7 @@ impl BeamResult {
 pub async fn check_availability(config: &BeamConfig) {
     let mut attempt: usize = 0;
 
-    println!("Check Beam availability...");
+    debug!("Check Beam availability...");
 
     loop {
         let resp = match config.client
@@ -177,7 +178,7 @@ pub async fn check_availability(config: &BeamConfig) {
         {
             Ok(response) => response,
             Err(e) => {
-                println!("Error making request: {:?}", e);
+                error!("Error making request: {:?}", e);
                 continue;
             }
         };
@@ -186,16 +187,16 @@ pub async fn check_availability(config: &BeamConfig) {
         let status_text = status_code.as_str();
 
         if resp.status().is_success() {
-            println!("Beam is available now.");
+            debug!("Beam is available now.");
             break;
         } else if attempt == 10 {
-            println!(
+            debug!(
                 "Beam still not available after {} attempts.",
                 10
             );
             break;
         } else {
-            println!("Beam still not available, retrying in 3 seconds...");
+            debug!("Beam still not available, retrying in 3 seconds...");
             sleep(Duration::from_secs(3)).await;
             attempt += 1;
         }
@@ -203,7 +204,7 @@ pub async fn check_availability(config: &BeamConfig) {
 }
 
 pub async fn retrieve_tasks(config: &BeamConfig) -> Result<Vec<BeamTask>, ExecutorError> {
-    println!("Retrieve tasks...");
+    trace!("Retrieve tasks...");
 
     let mut tasks: Vec<BeamTask> = Vec::new();
     let mut headers = HeaderMap::new();
@@ -231,7 +232,7 @@ pub async fn retrieve_tasks(config: &BeamConfig) -> Result<Vec<BeamTask>, Execut
 
     let status_code = resp.status();
     let status_text = status_code.as_str();
-    println!("{status_text}");
+    trace!("Status Code: {status_text}");
 
     match status_code {
         StatusCode::OK | StatusCode::PARTIAL_CONTENT => {
@@ -241,7 +242,7 @@ pub async fn retrieve_tasks(config: &BeamConfig) -> Result<Vec<BeamTask>, Execut
                 .map_err(|e| ExecutorError::UnableToParseTasks(e))?;
         }
         _ => {
-            println!("Unable to retrieve tasks: {}", status_code);
+            warn!("Unable to retrieve tasks: {}", status_code);
             //return error
         }
     }
