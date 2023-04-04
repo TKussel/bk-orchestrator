@@ -5,7 +5,7 @@ ENV RUSTUP_HOME=/usr/local/rustup \
     PATH=/usr/local/cargo/bin:$PATH \
     RUST_VERSION=1.68.2
     
-RUN apt-get update && apt-get install -y wget build-essential libsss-dev
+RUN apt-get update && apt-get install -y wget build-essential libssl-dev pkg-config
 
 RUN set -eux; \
     dpkgArch="$(dpkg --print-architecture)"; \
