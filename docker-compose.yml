@@ -25,7 +25,7 @@ services:
     image: bk-orchestrator:local
     environment:
       BEAM_PROXY_URL: http://proxy:8081
-      BEAM_APP_ID: ${APP_ID_SHORT}.${BROKER_ID}
+      BEAM_APP_ID: ${APP_ID_SHORT}.${PROXY_ID}
       BEAM_API_KEY: ${APP_KEY}
       TLS_CA_CERTIFICATE_DIR: ${TLS_CA_CERTIFICATE_DIR}
       HTTP_PROXY: ${HTTP_PROXY}

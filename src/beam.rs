@@ -96,7 +96,7 @@ pub struct BeamTask {
     pub to: Vec<AppId>,
     pub metadata: String,
     pub body: String,
-    pub ttl: usize,
+    pub ttl: String,
     pub failure_strategy: FailureStrategy,
 }
 
@@ -220,7 +220,7 @@ pub async fn retrieve_tasks(config: &BeamConfig) -> Result<Vec<BeamTask>, Execut
     );
 
     let url = format!(
-        "{}v1/tasks?filter=todo&wait_count=1&wait_time=100",
+        "{}v1/tasks?filter=todo&wait_count=1&wait_time=10s",
         config.beam_proxy_url
     );
     let resp = config.client
@@ -231,8 +231,6 @@ pub async fn retrieve_tasks(config: &BeamConfig) -> Result<Vec<BeamTask>, Execut
         .map_err(|e| ExecutorError::UnableToRetrieveTasks(e))?;
 
     let status_code = resp.status();
-    let status_text = status_code.as_str();
-    trace!("Status Code: {status_text}");
 
     match status_code {
         StatusCode::OK | StatusCode::PARTIAL_CONTENT => {

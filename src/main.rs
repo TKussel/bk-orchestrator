@@ -33,7 +33,7 @@ async fn main() -> Result<(), ExecutorError> {
 
     let (tx, rx): (Sender<ExecutionTask>, Receiver<ExecutionTask>) = mpsc::channel(1024); 
     let beam_tx = tx.clone();
-    let _beam_fetcher = tokio::spawn( async move { fetch_beam_tasks(beam_tx, config)});
+    let _beam_fetcher = tokio::spawn( async move { fetch_beam_tasks(beam_tx, config).await});
     let executor = tokio::spawn(async move { handle_tasks(rx, docker).await});
     _ = executor.await;
     error!("This should not be reached");
@@ -50,11 +50,12 @@ async fn fetch_beam_tasks(tx: Sender<ExecutionTask>, config: BeamConfig) {
             continue;
         };
         for task in tasks {
-            let Ok(task) = ExecutionTask::try_from(task.clone()) else {
+            let task = ExecutionTask::try_from(task.clone());
+            if task.is_err() {
                 warn!("Error in task {:?}", task);
                 continue;
             };
-            _ = tx.send(task).await.or_else(|e|{error!("Error: Could not send task to execution handler: {e}");Err(ExecutorError::ParsingError("()".into()))});
+            _ = tx.send(task.unwrap()).await.or_else(|e|{error!("Error: Could not send task to execution handler: {e}");Err(ExecutorError::ParsingError("()".into()))});
         }
     }
 }
@@ -66,7 +67,7 @@ async fn handle_tasks(mut rx: Receiver<ExecutionTask>, docker: Docker) {
     if let Some(task) = task {
         let local_docker_handler = docker.clone();
         // Todo: Match on Orchestrator
-        tokio::spawn(async move {executor::execute_bk_orchestrator(local_docker_handler, task.workload, uuid::Uuid::new_v4())});
+        tokio::spawn(async move {executor::execute_bk_orchestrator(local_docker_handler, task.workflow, uuid::Uuid::new_v4()).await});
     } else {
         sleep(Duration::from_millis(50)).await;
     };

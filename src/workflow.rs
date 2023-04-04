@@ -24,9 +24,14 @@ pub(crate) struct Workload {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+pub(crate) struct ExecutorInfo{
+    pub name: Executor,
+}
+
+#[derive(Debug, Clone, Deserialize)]
 pub(crate) struct ExecutionTask {
-    pub executor: Executor,
-    pub workload: Workload
+    pub executor: ExecutorInfo,
+    pub workflow: Workload
 }
 
 impl TryFrom<BeamTask> for ExecutionTask {
