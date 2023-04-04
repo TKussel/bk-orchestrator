@@ -4,6 +4,8 @@ ENV RUSTUP_HOME=/usr/local/rustup \
     CARGO_HOME=/usr/local/cargo \
     PATH=/usr/local/cargo/bin:$PATH \
     RUST_VERSION=1.68.2
+    
+RUN apt-get update && apt-get install -y wget 
 
 RUN set -eux; \
     dpkgArch="$(dpkg --print-architecture)"; \
