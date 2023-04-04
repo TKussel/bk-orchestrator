@@ -41,7 +41,7 @@ RUN cargo chef cook --release --recipe-path recipe.json
 COPY . .
 RUN cargo build --release
 
-FROM debian:bookworm AS runtime
+FROM ubuntu:22.04 AS runtime
 
 RUN apt-get update && apt-get install -y libssl-dev
 COPY --from=builder /app/target/release/bk-orchestrator .
