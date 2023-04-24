@@ -247,8 +247,8 @@ pub async fn retrieve_tasks(config: &BeamConfig) -> Result<Vec<BeamTask>, Execut
     Ok(tasks)
 }
 
-pub async fn claim_task(task: &BeamTask, config: &BeamConfig) -> Result<(),ExecutorError> {
-    debug!("Claim task {}", task.id);
+pub async fn answer_task_success(task: &BeamTask, config: &BeamConfig) -> Result<(),ExecutorError> {
+    debug!("Answer task {} as succeded", task.id);
 
     let mut headers = HeaderMap::new();
     headers.insert(
@@ -263,11 +263,12 @@ pub async fn claim_task(task: &BeamTask, config: &BeamConfig) -> Result<(),Execu
     );
 
     let url = format!(
-        "{}v1/task/{}",
+        "{}v1/tasks/{}/results/{}",
         config.beam_proxy_url,
-        task.id
+        task.id,
+        config.app_id
     );
-    let body = BeamResult::claimed(config.app_id.clone(), vec![task.from.clone()], task.id);
+    let body = BeamResult::succeeded(config.app_id.clone(), vec![task.from.clone()], task.id, "Started task".into());
     let resp = config.client
         .put(&url)
         .headers(headers)
@@ -278,8 +279,9 @@ pub async fn claim_task(task: &BeamTask, config: &BeamConfig) -> Result<(),Execu
 
     let status_code = resp.status();
 
-    if status_code != StatusCode::OK {
-        warn!("Unable to claim task {} : {}", task.id, status_code);
+    match status_code {
+        StatusCode::CREATED | StatusCode::NO_CONTENT => (),
+        _ =>  warn!("Unable to answer task {} : {}", task.id, status_code)
         // Return Err
     };
     Ok(())
