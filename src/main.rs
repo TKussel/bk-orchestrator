@@ -50,6 +50,11 @@ async fn fetch_beam_tasks(tx: Sender<ExecutionTask>, config: BeamConfig) {
             continue;
         };
         for task in tasks {
+            let claim = beam::claim_task(&task, &config).await;
+            if claim.is_err() {
+                warn!("Error claiming task {:?}", task);
+                continue;
+            }
             let task = ExecutionTask::try_from(task.clone());
             if task.is_err() {
                 warn!("Error in task {:?}", task);

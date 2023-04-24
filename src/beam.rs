@@ -246,3 +246,41 @@ pub async fn retrieve_tasks(config: &BeamConfig) -> Result<Vec<BeamTask>, Execut
     }
     Ok(tasks)
 }
+
+pub async fn claim_task(task: &BeamTask, config: &BeamConfig) -> Result<(),ExecutorError> {
+    debug!("Claim task {}", task.id);
+
+    let mut headers = HeaderMap::new();
+    headers.insert(
+        AUTHORIZATION,
+        HeaderValue::from_str(&format!("ApiKey {} {}", config.app_id, config.app_key))
+            .map_err(|e| {
+                ExecutorError::ConfigurationError(format!(
+                    "Cannot assemble authorization header: {}",
+                    e
+                ))
+            })?,
+    );
+
+    let url = format!(
+        "{}v1/task/{}",
+        config.beam_proxy_url,
+        task.id
+    );
+    let body = BeamResult::claimed(config.app_id.clone(), vec![task.from.clone()], task.id);
+    let resp = config.client
+        .put(&url)
+        .headers(headers)
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| ExecutorError::UnableToAnswerTask(e))?;
+
+    let status_code = resp.status();
+
+    if status_code != StatusCode::OK {
+        warn!("Unable to claim task {} : {}", task.id, status_code);
+        // Return Err
+    };
+    Ok(())
+}
