@@ -1,6 +1,6 @@
 mod beam;
 mod error;
-mod executor;
+mod docker_executor;
 mod workflow;
 mod config;
 mod banner;
@@ -15,7 +15,7 @@ use tokio::{sync::mpsc::{Receiver, Sender, self}, time::sleep};
 use reqwest::header::AUTHORIZATION;
 use bollard::Docker;
 
-use crate::workflow::ExecutionTask;
+use crate::workflow::{ExecutionTask, Executor};
 use tracing::{debug, error, warn, info};
 
 #[tokio::main]
@@ -28,13 +28,11 @@ async fn main() -> Result<(), ExecutorError> {
     banner::print_banner();
 
     let config = config::BeamConfig::load()?;
-    let docker =  Docker::connect_with_local_defaults().expect("Cannot initialize docker");
-    docker.version().await.expect("Cannot connect to docker");
 
     let (tx, rx): (Sender<ExecutionTask>, Receiver<ExecutionTask>) = mpsc::channel(1024); 
     let beam_tx = tx.clone();
     let _beam_fetcher = tokio::spawn( async move { fetch_beam_tasks(beam_tx, config).await});
-    let executor = tokio::spawn(async move { handle_tasks(rx, docker).await});
+    let executor = tokio::spawn(async move { handle_tasks(rx).await});
     _ = executor.await;
     error!("This should not be reached");
     Ok(())
@@ -65,19 +63,35 @@ async fn fetch_beam_tasks(tx: Sender<ExecutionTask>, config: BeamConfig) {
     }
 }
 
-async fn handle_tasks(mut rx: Receiver<ExecutionTask>, docker: Docker) {
+async fn handle_tasks(mut rx: Receiver<ExecutionTask>) {
     debug!("Executor Handler started");
     loop {
     let task = rx.recv().await;
     if let Some(task) = task {
-        let local_docker_handler = docker.clone();
-        // Todo: Match on Orchestrator
-        tokio::spawn(async move {executor::execute_bk_orchestrator(local_docker_handler, task.workflow, uuid::Uuid::new_v4()).await});
+        info!("Got task {:?} in executor", task);
+        tokio::spawn(async move {run_orchestrator(task).await});
     } else {
         sleep(Duration::from_millis(50)).await;
     };
 
     }
+}
+async fn run_orchestrator(task: ExecutionTask) {
+    match task.executor.name {
+        Executor::DockerExecutor => {
+            debug!("Initializing Docker engine");
+            let docker =  Docker::connect_with_local_defaults().expect("Cannot initialize docker");
+            let version = docker.version().await.expect("Cannot connect to docker");
+            println!("Version: {:?}", version);
+            debug!("Starting Docker Job");
+            if let Err(err) = docker_executor::execute_docker_orchestrator(docker, task.workflow, uuid::Uuid::new_v4()).await {
+                warn!("Error executing task: {}", err);
+            }
+        },
+        _ => {
+            warn!("Executor {:?} not implemented", task.executor.name)
+        }
+    };
 }
 
 

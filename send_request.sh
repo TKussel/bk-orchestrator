@@ -6,7 +6,7 @@ curl -v -X POST -H "Authorization: ApiKey executor.tobias-develop.broker.dev.ccp
   "to": [
     "executor.tobias-develop.broker.dev.ccp-it.dktk.dkfz.de"
   ],
-  "body": "{\"executor\":{\"name\":\"BKExecutor\"},\"workflow\":{\"output\":[\"output.csv\"],\"steps\":[{\"name\":\"bk-import\",\"image\":\"beispielimage:develop\",\"env\":[],\"input\":null,\"output\":\"data1.csv\"},{\"name\":\"second-import\",\"image\":\"beispielimage2:develop\",\"env\":[],\"input\":null,\"output\":\"data2.csv\"},{\"name\":\"merge-data\",\"image\":\"merger:develop\",\"env\":[],\"input\":[\"data1.csv\",\"data2.csv\"],\"output\":\"merged.csv\"},{\"name\":\"output-as-pdf\",\"image\":\"printer:develop\",\"env\":[],\"input\":[\"merged.csv\"],\"output\":\"output.csv\"}]}}",
+  "body": "{\"executor\":{\"name\":\"DockerExecutor\"},\"workflow\":{\"output\":[\"output.csv\"],\"steps\":[{\"name\":\"bk-import\",\"image\":\"beispielimage:develop\",\"env\":[],\"input\":null,\"output\":\"data1.csv\"},{\"name\":\"second-import\",\"image\":\"beispielimage2:develop\",\"env\":[],\"input\":null,\"output\":\"data2.csv\"},{\"name\":\"merge-data\",\"image\":\"merger:develop\",\"env\":[],\"input\":[\"data1.csv\",\"data2.csv\"],\"output\":\"merged.csv\"},{\"name\":\"output-as-pdf\",\"image\":\"printer:develop\",\"env\":[],\"input\":[\"merged.csv\"],\"output\":\"output.csv\"}]}}",
   "failure_strategy": {
     "retry": {
       "backoff_millisecs": 1000,

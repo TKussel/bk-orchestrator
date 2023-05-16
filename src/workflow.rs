@@ -5,7 +5,9 @@ use crate::{beam::BeamTask, error::ExecutorError};
 
 #[derive(Debug, Copy, Clone, Hash, Deserialize)]
 pub(crate) enum Executor {
-    BKExecutor
+    DockerExecutor,
+    HPCExecutor
+
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -18,7 +20,7 @@ pub(crate) struct WorkflowSteps {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
-pub(crate) struct Workload {
+pub(crate) struct Workflow {
     output: Vec<String>,
     steps: Vec<WorkflowSteps>
 }
@@ -31,7 +33,7 @@ pub(crate) struct ExecutorInfo{
 #[derive(Debug, Clone, Deserialize)]
 pub(crate) struct ExecutionTask {
     pub executor: ExecutorInfo,
-    pub workflow: Workload
+    pub workflow: Workflow
 }
 
 impl TryFrom<BeamTask> for ExecutionTask {
