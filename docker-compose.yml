@@ -7,8 +7,7 @@ services:
     environment:
       BROKER_URL: ${BROKER_URL}
       PROXY_ID: ${PROXY_ID}
-      APP_0_ID: ${APP_ID_SHORT}
-      APP_0_KEY: ${APP_KEY}
+      APP_${APP_ID_SHORT}_KEY: ${APP_KEY}
       PRIVKEY_FILE: /run/secrets/proxy.pem
       TLS_CA_CERTIFICATE_DIR: ${TLS_CA_CERTIFICATE_DIR}
       NO_PROXY: ${NO_PROXY}
@@ -32,7 +31,8 @@ services:
       HTTPS_PROXY: ${HTTPS_PROXY}
       NO_PROXY: proxy
       no_proxy: proxy
-      RUST_LOG: ${RUST_LOG}
+      RUST_LOG: debug
+      RUST_BACKTRACE: "full"
     volumes:
       - "/var/run/docker.sock:/var/run/docker.sock"
 secrets:
