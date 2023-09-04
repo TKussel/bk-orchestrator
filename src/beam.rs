@@ -179,6 +179,7 @@ pub async fn check_availability(config: &BeamConfig) {
             Ok(response) => response,
             Err(e) => {
                 error!("Error making request: {:?}", e);
+                sleep(Duration::from_secs(3)).await;
                 continue;
             }
         };
